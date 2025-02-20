@@ -21,4 +21,5 @@ const evmWalletChains = {
 
 export const NetworkId = 'testnet';
 export const HelloNearContract = contractPerNetwork[NetworkId];
+export const OmniHotContract = 'v1-1.omni.hot.tg';
 export const EVMWalletChain = evmWalletChains[NetworkId];

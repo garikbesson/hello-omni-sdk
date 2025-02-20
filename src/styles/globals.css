@@ -46,6 +46,8 @@
     --callout-border-rgb: 108, 108, 108;
     --card-rgb: 100, 100, 100;
     --card-border-rgb: 200, 200, 200;
+
+    --bs-secondary-bg: rgb(204, 204, 204);
   }
 }
 
@@ -79,6 +81,10 @@ body {
 a {
   color: inherit;
   text-decoration: none;
+}
+
+.btn:hover {
+  --bs-btn-hover-color: var(--bs-gray);
 }
 
 @media (prefers-color-scheme: dark) {

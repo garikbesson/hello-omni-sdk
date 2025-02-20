@@ -112,6 +112,10 @@
   position: relative;
 }
 
+.swap-container {
+  width: 100%;
+}
+
 /* Enable hover only on non-touch devices */
 @media (hover: hover) and (pointer: fine) {
   .card:hover {

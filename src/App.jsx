@@ -2,6 +2,7 @@ import { Navigation } from './components/navigation';
 import Home from './pages/home';
 
 import HelloNear from './pages/hello_near';
+import Omni from './pages/omni.jsx';
 import { useEffect, useState } from 'react';
 import { NetworkId } from './config.js';
 import { NearContext, Wallet } from '@/wallets/near';
@@ -27,6 +28,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/hello-near" element={<HelloNear />} />
+          <Route path="/omni" element={<Omni />} />
         </Routes>
       </BrowserRouter>
     </NearContext.Provider>
