@@ -35,5 +35,8 @@ export const tokens = {
 
 export const NetworkId = 'mainnet';
 export const HelloNearContract = contractPerNetwork[NetworkId];
-export const OmniHotContract = 'v1-1.omni.hot.tg';
 export const EVMWalletChain = evmWalletChains[NetworkId];
+
+export const OmniHotContract = 'v1-1.omni.hot.tg';
+export const OmniHelperContract = 'v1-1.omni-helper.hot.tg';
+export const OmniAPI = 'https://rpc0.hotdao.ai';
