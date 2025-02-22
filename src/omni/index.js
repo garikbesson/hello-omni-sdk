@@ -6,6 +6,96 @@ import { OmniAPI, OmniHelperContract, OmniHotContract } from "@/config";
 import { TGAS } from "@/utils";
 import { tokens } from "../config";
 
+export const depositToken = async (nearConnection, accountId, tokenContract, tokenAmount, tokenDecimals) => {
+  const args = {
+    contractId: tokenContract,
+    method: "ft_transfer_call",
+    args: {
+      amount: String(tokenAmount * 10**tokenDecimals),
+      receiver_id: OmniHotContract,
+      msg: getOmniAddress(accountId) },
+    deposit: 1n,
+    gas: 80n * TGAS,
+  };
+  return await nearConnection.callMethod(args);
+};
+
+export const withdrawToken = async (nearConnection, accountId, tokenContract, tokenId, tokenAmount, tokenDecimals) => {
+  const needReg = await nearConnection.viewMethod({
+    contractId: tokenContract,
+    method: "storage_balance_of",
+    args: { account_id: accountId },
+  });
+  const args = {
+    contractId: OmniHotContract,
+    method: "withdraw_on_near",
+    args: {
+      account_id: getOmniAddress(accountId),
+      token_id: tokenId,
+      amount: String(tokenAmount * 10**tokenDecimals),
+    },
+    deposit: needReg == null ? 5000000000000000000000n : 1n,
+    gas: 80n * TGAS,
+  };
+  return await nearConnection.callMethod(args);
+};
+
+export const getOmniAddress = (address) => {
+  return baseEncode(getBytes(sha256(Buffer.from(address, "utf8"))));
+}
+
+export const getOmniBalances = async (nearConnection, signedAccountId) => {
+  const balances = await nearConnection.viewMethod({
+    args: { account_id: getOmniAddress(signedAccountId) },
+    method: "get_balance",
+    contractId: OmniHotContract,
+  });
+
+  return balances;
+};
+
+export const getActiveWithdrawals = async (nearConnection, accountId) => {
+  const nonces = await nearConnection.viewMethod({
+      contractId: OmniHelperContract,
+      method: "get_withdrawals",
+      args: { account_id: getOmniAddress(accountId) },
+  });
+  let withdrawals = [];
+  const promises = nonces.map(async (nonce) => {
+      // More then 17 days -> expired nonce (non-refundable)
+      if (+nonce <= 1.728526736e+21)
+          return;
+      const currentNonce = Date.now() * 1000000000;
+      const daysAgo = (currentNonce - +nonce) / 1000000000000 / 3600 / 24;
+      if (daysAgo >= 16)
+          return;
+      const transfer = await nearConnection.viewMethod({ method: "get_transfer", contractId: OmniHotContract, args: { nonce } });
+      if (transfer == null)
+          return;
+      // const isUsed = await this.isWithdrawUsed(transfer.chain_id, nonce);
+      const isUsed = false; // Only for NEAR chain
+      if (isUsed)
+          return;
+      console.log({ daysAgo });
+      withdrawals.push({
+          receiver: transfer.receiver_id,
+          amount: transfer.amount,
+          token: transfer.token_id,
+          chain: transfer.chain_id,
+          nonce: String(nonce),
+          timestamp: Date.now(),
+          completed: false,
+      });
+  });
+  await Promise.allSettled(promises);
+  
+  for (let pending of withdrawals) {
+    if (pending.chain === 1010) {
+      await finishWithdrawal(nearConnection, pending.nonce);
+    }
+  }
+};
+
 export const isWithdrawNonceExpired = (nonce) => {
   // Only for NEAR. For TON we need different time value
   const time = 480_000;
@@ -20,7 +110,7 @@ const timeLeftForRefund = (nonce) => {
 }
 
 const getReceiverRaw = (/* chain: Network */accountId) => {
-  return baseEncode(getBytes(sha256(Buffer.from(accountId, "utf8"))));
+  return getOmniAddress(accountId);
   // if (chain === Network.Near) return baseEncode(getBytes(sha256(Buffer.from(this.signers.near.accountId, "utf8"))));
 
   // if (chain === Network.Solana) {
@@ -85,4 +175,22 @@ export const cancelWithdraw = async (nearConnection, nonce) => {
   });
 
   return transfer;
+}
+
+export const finishWithdrawal = async (nearConnection, nonce) => {
+  /*const transfer = */await nearConnection.viewMethod({
+    contractId: OmniHotContract,
+    method: "get_transfer",
+    args: { nonce },
+  });
+
+  if (isWithdrawNonceExpired(nonce)) {
+    await cancelWithdraw(nearConnection, nonce);
+    return;
+  }
+
+  // THis stuff for other chains, not NEAR
+  // if (await isWithdrawUsed(transfer.chain_id, nonce)) {
+  //   throw "Already claimed";
+  // }
 }

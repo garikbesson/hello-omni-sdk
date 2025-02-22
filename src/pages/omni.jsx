@@ -1,18 +1,14 @@
 import { useContext, useEffect, useRef, useState } from 'react';
-import { baseEncode, formatNearAmount } from "@near-js/utils";
-import { getBytes, sha256 } from "ethers";
-import { Buffer } from 'buffer';
+import { formatNearAmount } from "@near-js/utils";
 
 import { NearContext } from '@/wallets/near';
 import { Cards } from '@/components/cards';
 
-import { isWithdrawNonceExpired, cancelWithdraw } from '@/omni';
-import { TGAS } from '@/utils';
-import { OmniHotContract, OmniHelperContract, tokens } from '@/config';
+import { getOmniBalances, getActiveWithdrawals, depositToken, withdrawToken } from '@/omni';
+import { OmniHotContract, tokens } from '@/config';
 import styles from '@/styles/app.module.css';
 
 const Omni = () => {
-  // const { signedAccountId, wallet } = useContext(NearContext);
   const { signedAccountId, wallet } = useContext(NearContext);
   const [loggedIn, setLoggedIn] = useState(false);
   const [selectedDeposit, setSelectedDeposit] = useState(true);
@@ -31,15 +27,11 @@ const Omni = () => {
   const handleDepositClick = () => {
     setSelectedDeposit(true);
     setSelectedWithdraw(false);
-    console.log('selectedDeposit:', selectedDeposit);
-    console.log('selectedWithdraw:', selectedWithdraw);
   };
 
   const handleWithdrawClick = () => {
     setSelectedDeposit(false);
     setSelectedWithdraw(true);
-    console.log('selectedDeposit:', selectedDeposit);
-    console.log('selectedWithdraw:', selectedWithdraw);
   };
 
   const handleFromSelectorChange = (event) => {
@@ -54,11 +46,6 @@ const Omni = () => {
     setTokenAmount(event.target.value);
   };
 
-  const getOmniAddress = (address) => {
-    console.log('address:', address);
-    return baseEncode(getBytes(sha256(Buffer.from(address, "utf8"))));
-  }
-
   const handleConfirmClick = async () => {
     const tokenSelectorValue = tokenSelectorRef.current.value;
     const fromSelectorValue = fromSelectorRef.current.value;
@@ -66,130 +53,26 @@ const Omni = () => {
     
     if (selectedDeposit) {
       const tokenData = tokens[tokenSelectorValue][fromSelectorValue];
-      const args = {
-        contractId: tokenData.address,
-        method: "ft_transfer_call",
-        args: { amount: String(tokenAmount * 10**tokenData.decimals), receiver_id: OmniHotContract, msg: getOmniAddress(signedAccountId) },
-        deposit: 1n,
-        gas: 80n * TGAS,
-      };
-      console.log(args);
-      wallet.callMethod(args);
+      depositToken(wallet, signedAccountId, tokenData.address, tokenAmount, tokenData.decimals);
     } else if (selectedWithdraw) {
       const tokenData = tokens[tokenSelectorValue][toSelectorValue];
-      const needReg = await wallet.viewMethod({
-        contractId: tokenData.address,
-        method: "storage_balance_of",
-        args: { account_id: signedAccountId },
-      });
-      const args = {
-        contractId: OmniHotContract,
-        method: "withdraw_on_near",
-        args: {
-          account_id: getOmniAddress(signedAccountId),
-          token_id: tokenData.id,
-          amount: String(tokenAmount * 10**tokenData.decimals),
-        },
-        deposit: needReg == null ? 5000000000000000000000n : 1n,
-        gas: 80n * TGAS,
-      };
-      console.log(args);
-      wallet.callMethod(args);
+      withdrawToken(wallet, signedAccountId, tokenData.address, tokenData.id, tokenAmount, tokenData.decimals);
     }
-    console.log("Token:", tokenSelectorValue);
-    console.log("From:", fromSelectorValue);
-    console.log("To:", toSelectorValue);
-    console.log("Token Amount:", tokenAmount);
   };
 
   useEffect(() => {
     setLoggedIn(!!signedAccountId);
 
-    const getOmniBalances = async (signedAccountId) => {
-      if (!signedAccountId) {
-        return;
+    const updateOmniData = async () => {
+      if (signedAccountId) {
+        getActiveWithdrawals(wallet, signedAccountId);
+
+        const balances = await getOmniBalances(wallet, signedAccountId);
+        setUsdtBalance(balances[9]);        
       }
-
-      const balances = await wallet.viewMethod({
-        args: { account_id: getOmniAddress(signedAccountId) },
-        method: "get_balance",
-        contractId: OmniHotContract,
-      });
-
-      console.log('balances:', balances);
-      setUsdtBalance(balances[9]);
-      // setUsdcBalance(balances[1]);
-      // setOmniBalances(balances);
     };
 
-    const getActiveWithdrawals = async () => {
-      if (!signedAccountId) {
-        return;
-      }
-
-      const nonces = await wallet.viewMethod({
-          contractId: OmniHelperContract,
-          method: "get_withdrawals",
-          args: { account_id: getOmniAddress(signedAccountId) },
-      });
-      let withdrawals = [];
-      const promises = nonces.map(async (nonce) => {
-          // More then 17 days -> expired nonce (non-refundable)
-          if (+nonce <= 1.728526736e+21)
-              return;
-          const currentNonce = Date.now() * 1000000000;
-          const daysAgo = (currentNonce - +nonce) / 1000000000000 / 3600 / 24;
-          if (daysAgo >= 16)
-              return;
-          const transfer = await wallet.viewMethod({ method: "get_transfer", contractId: OmniHotContract, args: { nonce } });
-          if (transfer == null)
-              return;
-          // const isUsed = await this.isWithdrawUsed(transfer.chain_id, nonce);
-          const isUsed = false; // Only for NEAR chain
-          if (isUsed)
-              return;
-          console.log({ daysAgo });
-          withdrawals.push({
-              receiver: transfer.receiver_id,
-              amount: transfer.amount,
-              token: transfer.token_id,
-              chain: transfer.chain_id,
-              nonce: String(nonce),
-              timestamp: Date.now(),
-              completed: false,
-          });
-      });
-      await Promise.allSettled(promises);
-      console.log('withdrawals:', withdrawals);
-      
-      for (let pending of withdrawals) {
-        if (pending.chain === 1010) {
-          console.log('pending:', pending);
-          await finishWithdrawal(pending.nonce);
-        }
-      }
-      // setActiveWithdrawals(withdrawals);
-    };
-
-    const finishWithdrawal = async (nonce) => {
-      const transfer = await wallet.viewMethod({
-        contractId: OmniHotContract,
-        method: "get_transfer",
-        args: { nonce },
-      });
-  
-      if (isWithdrawNonceExpired(nonce)) {
-        await cancelWithdraw(wallet, nonce);
-        return;
-      }
-  
-      if (await this.isWithdrawUsed(transfer.chain_id, nonce)) {
-        throw "Already claimed";
-      }
-    }
-
-    getOmniBalances(signedAccountId);
-    getActiveWithdrawals();
+    updateOmniData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signedAccountId]);
   
