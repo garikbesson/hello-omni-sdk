@@ -37,6 +37,7 @@ export class Wallet {
    */
   constructor({ networkId = 'testnet', createAccessKeyFor = undefined }) {
     this.createAccessKeyFor = createAccessKeyFor;
+    console.log('networkId:', networkId);
     this.networkId = networkId;
   }
 

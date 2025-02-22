@@ -9,7 +9,7 @@ import { NearContext, Wallet } from '@/wallets/near';
 import { BrowserRouter, Routes, Route } from "react-router";
 
 // Wallet instance
-const wallet = new Wallet({ NetworkId: NetworkId });
+const wallet = new Wallet({ networkId: NetworkId });
 
 // Optional: Create an access key so the user does not need to sign transactions. Read more about access keys here: https://docs.near.org/concepts/protocol/access-keys
 // const wallet = new Wallet({ networkId: NetworkId, createAccessKeyFor: HelloNearContract });
