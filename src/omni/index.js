@@ -11,7 +11,7 @@ export const depositToken = async (nearConnection, accountId, tokenContract, tok
     contractId: tokenContract,
     method: "ft_transfer_call",
     args: {
-      amount: String(tokenAmount * 10**tokenDecimals),
+      amount: String(BigInt(tokenAmount * 10**tokenDecimals)),
       receiver_id: OmniHotContract,
       msg: getOmniAddress(accountId) },
     deposit: 1n,
@@ -20,7 +20,7 @@ export const depositToken = async (nearConnection, accountId, tokenContract, tok
   return await nearConnection.callMethod(args);
 };
 
-export const withdrawToken = async (nearConnection, accountId, tokenContract, tokenId, tokenAmount, tokenDecimals) => {
+export const withdrawToken = async (nearConnection, accountId, tokenContract, tokenId, tokenAmount) => {
   const needReg = await nearConnection.viewMethod({
     contractId: tokenContract,
     method: "storage_balance_of",
@@ -32,7 +32,7 @@ export const withdrawToken = async (nearConnection, accountId, tokenContract, to
     args: {
       account_id: getOmniAddress(accountId),
       token_id: tokenId,
-      amount: String(tokenAmount * 10**tokenDecimals),
+      amount: String(BigInt(tokenAmount * 10**24)),
     },
     deposit: needReg == null ? 5000000000000000000000n : 1n,
     gas: 80n * TGAS,

@@ -56,7 +56,7 @@ const Omni = () => {
       depositToken(wallet, signedAccountId, tokenData.address, tokenAmount, tokenData.decimals);
     } else if (selectedWithdraw) {
       const tokenData = tokens[tokenSelectorValue][toSelectorValue];
-      withdrawToken(wallet, signedAccountId, tokenData.address, tokenData.id, tokenAmount, tokenData.decimals);
+      withdrawToken(wallet, signedAccountId, tokenData.address, tokenData.id, tokenAmount);
     }
   };
 
