@@ -19,6 +19,15 @@ const evmWalletChains = {
   },
 };
 
+export const chains = {
+  near: {
+    id: 1010
+  },
+  solana: {
+    id: 1001
+  }
+};
+
 export const tokens = {
   usdt: {
     near: {
@@ -27,9 +36,15 @@ export const tokens = {
       omniAddress: 'YstfWsCY5nxES8LjochRc8ne1dRph7',
       amount: 1000n,
       id: 9,
-      chain: 1010
+      chain: chains.near.id
     },
-    solana: {},
+    solana: {
+      address: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
+      omniAddress: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
+      decimals: 6,
+      id: 9,
+      chain: chains.solana.id,
+    },
   },
 };
 

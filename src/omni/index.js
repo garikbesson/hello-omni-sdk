@@ -1,10 +1,15 @@
 import { baseEncode } from "@near-js/utils";
+import { providers } from 'near-api-js';
 import { getBytes, sha256 } from "ethers";
 import { Buffer } from 'buffer';
 
 import { OmniAPI, OmniHelperContract, OmniHotContract } from "@/config";
 import { TGAS } from "@/utils";
-import { tokens } from "../config";
+import { chains, tokens } from "../config";
+import getProvider from "@/wallets/solana/getProvider";
+import { withdraw as solanaWithdraw, isNonceUsed } from '@/wallets/solana/withdraw';
+
+const nearProvider = new providers.JsonRpcProvider({ url: 'https://free.rpc.fastnear.com' });
 
 export const depositToken = async (nearConnection, accountId, tokenContract, tokenAmount, tokenDecimals) => {
   const args = {
@@ -20,24 +25,64 @@ export const depositToken = async (nearConnection, accountId, tokenContract, tok
   return await nearConnection.callMethod(args);
 };
 
-export const withdrawToken = async (nearConnection, accountId, tokenContract, tokenId, tokenAmount) => {
-  const needReg = await nearConnection.viewMethod({
-    contractId: tokenContract,
-    method: "storage_balance_of",
-    args: { account_id: accountId },
-  });
-  const args = {
+export const withdrawToken = async (nearConnection, accountId, chainId, tokenContract, tokenId, tokenAmount) => {
+  // NEAR
+  if (chainId === chains.near.id) {
+    const needReg = await nearConnection.viewMethod({
+      contractId: tokenContract,
+      method: "storage_balance_of",
+      args: { account_id: accountId },
+    });
+    const args = {
+      contractId: OmniHotContract,
+      method: "withdraw_on_near",
+      args: {
+        account_id: getOmniAddress(accountId),
+        token_id: tokenId,
+        amount: String(BigInt(tokenAmount * 10**24)),
+      },
+      deposit: needReg == null ? 5000000000000000000000n : 1n,
+      gas: 80n * TGAS,
+    };
+    return await nearConnection.callMethod(args);
+  }
+
+  const tx = await nearConnection.callMethod({
     contractId: OmniHotContract,
-    method: "withdraw_on_near",
+    method: "withdraw",
+    deposit: 1n,
+    gas: 80n * TGAS,
     args: {
+      helper_contract_id: OmniHelperContract,
+      receiver_id: await getReceiverRaw(chainId),
       account_id: getOmniAddress(accountId),
       token_id: tokenId,
+      chain_id: chainId,
       amount: String(BigInt(tokenAmount * 10**24)),
     },
-    deposit: needReg == null ? 5000000000000000000000n : 1n,
-    gas: 80n * TGAS,
-  };
-  return await nearConnection.callMethod(args);
+  });
+
+  const receipt = await nearProvider.txStatusReceipts(
+    tx.transaction_outcome.id,
+    accountId,
+    "EXECUTED"
+  );
+
+  const transfer = (() => {
+    for (let item of receipt.receipts_outcome) {
+      for (let log of item.outcome.logs) {
+        const nonce = `${log}`.match(/nonce.....(\d+)/)?.[1];
+        const amount = `${log}`.match(/amount.....(\d+)/)?.[1];
+        if (nonce && amount) return { amount, nonce };
+      }
+    }
+  })();
+
+  if (transfer == null) {
+    throw `Nonce not found, contact support please`;
+  }
+
+  await finishWithdrawal(nearConnection, accountId, transfer.nonce);
 };
 
 export const getOmniAddress = (address) => {
@@ -54,7 +99,7 @@ export const getOmniBalances = async (nearConnection, signedAccountId) => {
   return balances;
 };
 
-export const getActiveWithdrawals = async (nearConnection, accountId) => {
+export const getActiveWithdrawals = async (nearConnection, accountId, finishWithdrawals = false) => {
   const nonces = await nearConnection.viewMethod({
       contractId: OmniHelperContract,
       method: "get_withdrawals",
@@ -88,20 +133,48 @@ export const getActiveWithdrawals = async (nearConnection, accountId) => {
       });
   });
   await Promise.allSettled(promises);
-  
-  for (let pending of withdrawals) {
-    if (pending.chain === 1010) {
-      await finishWithdrawal(nearConnection, pending.nonce);
+  console.log(withdrawals);
+
+  if (finishWithdrawals) {
+
+    for (let pending of withdrawals) {
+      if (pending.chain !== 1
+          && pending.nonce !== '1740309927000000204333'
+          && pending.nonce !== '1739879858000000199386'
+          && pending.nonce !== '1739880219000000199393'
+          && pending.nonce !== '1739880356000000199397'
+          && pending.nonce !== '1739833576000000198425'
+          && pending.nonce !== '1739880139000000199391'
+          && pending.nonce !== '1739881427000000199423'
+          && pending.nonce !== '1739879972000000199389'
+          && pending.nonce !== '1739881514000000199426'
+          && pending.nonce !== '1739881577000000199428'
+          && pending.nonce !== '1739881624000000199429'
+      ) {
+        await finishWithdrawal(nearConnection, accountId, pending.nonce);
+      }
     }
   }
+
+  return withdrawals;
 };
 
 export const isWithdrawNonceExpired = (nonce) => {
-  // Only for NEAR. For TON we need different time value
+  // Only for NEAR, Solana. For TON we need different time value
   const time = 480_000;
   const ts = BigInt(nonce) / 1000000000000n;
   return Date.now() - Number(ts) * 1000 > time;
 };
+
+const isWithdrawUsed = async (chainId, nonce) => {
+  if (chainId === chains.solana.id) {
+    const provider = getProvider();
+    const solana = await provider.connect();
+    const publicKey = solana.publicKey
+    return await isNonceUsed(provider, publicKey, nonce);
+  }
+  return false;
+}
 
 const timeLeftForRefund = (nonce) => {
   const ts = BigInt(nonce) / 1000000000000n;
@@ -109,14 +182,22 @@ const timeLeftForRefund = (nonce) => {
   return Math.max(0, 602_000 - time);
 }
 
-const getReceiverRaw = (/* chain: Network */accountId) => {
-  return getOmniAddress(accountId);
-  // if (chain === Network.Near) return baseEncode(getBytes(sha256(Buffer.from(this.signers.near.accountId, "utf8"))));
+const getReceiverRaw = async (chainId, address) => {
+  if (chainId === chains.near.id) {
+    return getOmniAddress(address);
+  }
 
-  // if (chain === Network.Solana) {
-  //   if (this.signers.solana == null) throw "Connect Solana";
-  //   return this.signers.solana.publicKey.toBase58();
-  // }
+  if (chainId === chains.solana.id) {
+    const provider = getProvider();
+    const solana = await provider.connect();
+    const publicKey = solana.publicKey.toBase58();
+    console.log(solana.publicKey.toString());
+    return publicKey;
+    // if (this.signers.solana == null) throw "Connect Solana";
+    // return this.signers.solana.publicKey.toBase58();
+  }
+
+  throw `Unsupported chain address ${chainId}`;
 
   // if (chain === Network.Ton) {
   //   if (this.signers.ton == null) throw "Connect TON";
@@ -139,6 +220,19 @@ const refundSign = async (chain, nonce, receiver_id, token_id, amount) => {
     method: "POST",
   });
 
+  const jsonResult = await res.json();
+  console.log('jsonResult:', jsonResult);
+  const { signature } = jsonResult;
+  return signature;
+}
+
+const withdrawSign = async (nonce) => {
+  const res = await fetch(`${OmniAPI}/withdraw/sign`, {
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ nonce }),
+    method: "POST",
+  });
+
   const { signature } = (await res.json());
   return signature;
 }
@@ -157,17 +251,26 @@ export const cancelWithdraw = async (nearConnection, nonce) => {
   const timeToRefund = timeLeftForRefund(nonce);
   if (timeToRefund > 0) throw `Refund will be available in ${timeToRefund} seconds.`;
 
-  const receiver = getReceiverRaw(transfer.receiver);
+  const receiver = await getReceiverRaw(transfer.chain_id, transfer.receiver);
   // const token = await this.token(transfer.token_id).metadata(transfer.chain_id);
-  const signature = await refundSign(/*transfer.chain_id,*/1010, nonce, receiver, tokens.usdt.near.omniAddress, transfer.amount);
+  console.log('transfer:', transfer);
+  let omniAddress;
 
-  await this.signers.near.functionCall({
+  if (transfer.chain_id === chains.near.id) {
+    omniAddress = tokens.usdt.near.omniAddress;
+  }
+  if (transfer.chain_id === chains.solana.id) {
+    omniAddress = tokens.usdt.solana.omniAddress;
+  }
+  const signature = await refundSign(transfer.chain_id, nonce, receiver, omniAddress, transfer.amount);
+
+  await nearConnection.callMethod({
     contractId: OmniHotContract,
-    methodName: "refund",
+    method: "refund",
     gas: 120n * TGAS,
-    attachedDeposit: 0n,
+    deposit: 0n,
     args: {
-      chain_id: 1010, // transfer.chain_id,
+      chain_id: transfer.chain_id,
       helper_contract_id: OmniHelperContract,
       nonce: nonce,
       signature,
@@ -177,8 +280,8 @@ export const cancelWithdraw = async (nearConnection, nonce) => {
   return transfer;
 }
 
-export const finishWithdrawal = async (nearConnection, nonce) => {
-  /*const transfer = */await nearConnection.viewMethod({
+export const finishWithdrawal = async (nearConnection, accountId, nonce) => {
+  const transfer = await nearConnection.viewMethod({
     contractId: OmniHotContract,
     method: "get_transfer",
     args: { nonce },
@@ -189,8 +292,16 @@ export const finishWithdrawal = async (nearConnection, nonce) => {
     return;
   }
 
-  // THis stuff for other chains, not NEAR
-  // if (await isWithdrawUsed(transfer.chain_id, nonce)) {
-  //   throw "Already claimed";
-  // }
+  if (await isWithdrawUsed(transfer.chain_id, nonce)) {
+    throw "Already claimed";
+  }
+
+  const signature = await withdrawSign(nonce);
+
+  // SOLANA WITHDRAW
+  if (+transfer.chain_id === chains.solana.id) {
+    console.log('transfer:', transfer);
+    await solanaWithdraw({ nearConnection, accountId, nonce, signature, transfer });
+    return;
+  }
 }

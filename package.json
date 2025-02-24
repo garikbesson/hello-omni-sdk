@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@coral-xyz/anchor": "0.29.0",
     "@esbuild-plugins/node-globals-polyfill": "^0.2.3",
     "@hot-wallet/omni-sdk": "^1.1.1",
     "@near-js/providers": "^1.0.1",
@@ -24,6 +25,8 @@
     "@near-wallet-selector/near-mobile-wallet": "^8.9.14",
     "@near-wallet-selector/sender": "^8.9.14",
     "@near-wallet-selector/welldone-wallet": "^8.9.14",
+    "@solana/spl-token": "^0.4.12",
+    "@solana/web3.js": "^1.98.0",
     "@wagmi/connectors": "^5.7.1",
     "@wagmi/core": "^2.16.1",
     "@web3modal/wagmi": "^5.1.11",
@@ -34,6 +37,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router": "^7.1.1",
+    "solana-advanced-connection": "^1.1.0",
     "vite-plugin-eslint": "^1.8.1"
   },
   "devDependencies": {

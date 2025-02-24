@@ -7,6 +7,7 @@ import { Cards } from '@/components/cards';
 import { getOmniBalances, getActiveWithdrawals, depositToken, withdrawToken } from '@/omni';
 import { OmniHotContract, tokens } from '@/config';
 import styles from '@/styles/app.module.css';
+import { chains } from '../config';
 
 const Omni = () => {
   const { signedAccountId, wallet } = useContext(NearContext);
@@ -50,13 +51,15 @@ const Omni = () => {
     const tokenSelectorValue = tokenSelectorRef.current.value;
     const fromSelectorValue = fromSelectorRef.current.value;
     const toSelectorValue = toSelectorRef.current.value;
-    
+
     if (selectedDeposit) {
       const tokenData = tokens[tokenSelectorValue][fromSelectorValue];
       depositToken(wallet, signedAccountId, tokenData.address, tokenAmount, tokenData.decimals);
     } else if (selectedWithdraw) {
       const tokenData = tokens[tokenSelectorValue][toSelectorValue];
-      withdrawToken(wallet, signedAccountId, tokenData.address, tokenData.id, tokenAmount);
+      console.log(tokenData);
+      const chainId = chains[toSelectorValue].id;
+      withdrawToken(wallet, signedAccountId, chainId, tokenData.address, tokenData.id, tokenAmount);
     }
   };
 
@@ -65,7 +68,7 @@ const Omni = () => {
 
     const updateOmniData = async () => {
       if (signedAccountId) {
-        getActiveWithdrawals(wallet, signedAccountId);
+        getActiveWithdrawals(wallet, signedAccountId, true);
 
         const balances = await getOmniBalances(wallet, signedAccountId);
         setUsdtBalance(balances[9]);        
@@ -153,7 +156,6 @@ const Omni = () => {
                     <>
                       <option value="near">Near</option>
                       <option value="solana">Solana</option>
-                      <option value="ton">Ton</option>
                     </>
                   ) : (
                     <option value="hot-omni">Hot Omni</option>
