@@ -99,7 +99,7 @@ export const getOmniBalances = async (nearConnection, signedAccountId) => {
   return balances;
 };
 
-export const getActiveWithdrawals = async (nearConnection, accountId, finishWithdrawals = false) => {
+export const getActiveWithdrawals = async (nearConnection, accountId) => {
   const nonces = await nearConnection.viewMethod({
       contractId: OmniHelperContract,
       method: "get_withdrawals",
@@ -134,27 +134,6 @@ export const getActiveWithdrawals = async (nearConnection, accountId, finishWith
   });
   await Promise.allSettled(promises);
   console.log(withdrawals);
-
-  if (finishWithdrawals) {
-
-    for (let pending of withdrawals) {
-      if (pending.chain !== 1
-          && pending.nonce !== '1740309927000000204333'
-          && pending.nonce !== '1739879858000000199386'
-          && pending.nonce !== '1739880219000000199393'
-          && pending.nonce !== '1739880356000000199397'
-          && pending.nonce !== '1739833576000000198425'
-          && pending.nonce !== '1739880139000000199391'
-          && pending.nonce !== '1739881427000000199423'
-          && pending.nonce !== '1739879972000000199389'
-          && pending.nonce !== '1739881514000000199426'
-          && pending.nonce !== '1739881577000000199428'
-          && pending.nonce !== '1739881624000000199429'
-      ) {
-        await finishWithdrawal(nearConnection, accountId, pending.nonce);
-      }
-    }
-  }
 
   return withdrawals;
 };
@@ -197,7 +176,11 @@ const getReceiverRaw = async (chainId, address) => {
     // return this.signers.solana.publicKey.toBase58();
   }
 
-  throw `Unsupported chain address ${chainId}`;
+  if (chainId === chains.ethereum.id) {
+    throw 'Connect Ethereum wallet'  
+  }
+
+  throw `Unsupported chain address: ${chainId}`;
 
   // if (chain === Network.Ton) {
   //   if (this.signers.ton == null) throw "Connect TON";

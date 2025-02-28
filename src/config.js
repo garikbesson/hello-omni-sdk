@@ -25,7 +25,10 @@ export const chains = {
   },
   solana: {
     id: 1001
-  }
+  },
+  ethereum: {
+    id: 1,
+  },
 };
 
 export const tokens = {
