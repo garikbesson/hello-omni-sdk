@@ -30,6 +30,7 @@
     "@wagmi/connectors": "^5.7.1",
     "@wagmi/core": "^2.16.1",
     "@web3modal/wagmi": "^5.1.11",
+    "bn.js": "^5.2.1",
     "bootstrap": "^5",
     "bootstrap-icons": "^1.11.3",
     "buffer": "^6.0.3",

@@ -14,7 +14,7 @@ const Omni = () => {
   const [loggedIn, setLoggedIn] = useState(false);
   const [selectedDeposit, setSelectedDeposit] = useState(true);
   const [selectedWithdraw, setSelectedWithdraw] = useState(false);
-  const [fromSelector, setFromSelector] = useState("near");
+  const [fromSelector, setFromSelector] = useState("solana");
   const [toSelector, setToSelector] = useState("hot-omni");
   const [tokenAmount, setTokenAmount] = useState(0.001);
   const [usdtBalance, setUsdtBalance] = useState(null);
@@ -52,9 +52,11 @@ const Omni = () => {
     const fromSelectorValue = fromSelectorRef.current.value;
     const toSelectorValue = toSelectorRef.current.value;
 
+    const chainId = chains[fromSelectorValue].id;
+
     if (selectedDeposit) {
       const tokenData = tokens[tokenSelectorValue][fromSelectorValue];
-      depositToken(wallet, signedAccountId, tokenData.address, tokenAmount, tokenData.decimals);
+      depositToken(chainId, wallet, signedAccountId, tokenData.address, tokenAmount, tokenData.decimals);
     } else if (selectedWithdraw) {
       const tokenData = tokens[tokenSelectorValue][toSelectorValue];
       console.log(tokenData);

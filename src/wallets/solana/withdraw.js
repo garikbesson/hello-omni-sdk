@@ -10,54 +10,10 @@ import {
 } from "@solana/spl-token";
 import { baseDecode } from "@near-js/utils";
 import { tokens, /*chains*/ } from "@/config";
-import { Buffer } from "buffer";
 // import { getActiveWithdrawals } from "../../omni";
-import getProvider from "./getProvider";
-import IDL from "./idl.json";
-
-const PROGRAM_ID = new anchor.web3.PublicKey("5bG1Kru6ifRmkWMigYaGRKbBKp3WrgcmB6ARNKsV2y2v");
-
-const connection = new sol.Connection("https://greatest-dark-haze.solana-mainnet.quiknode.pro/59212e5be0a628ec9d05e336694332955ff08bff", "processed");
-console.log("getAccountInfoAndContext method:", connection.getAccountInfoAndContext);
-
-const getEnv = async (connection, publicKey) => {
-  if (!window.solana || !window.solana.isPhantom) {
-    alert("Phantom Wallet не найден. Установите его и повторите попытку.");
-    throw new Error("Phantom Wallet не найден");
-  }
-  
-  // Подключаемся к Phantom (необходимое подтверждение от пользователя)
-  await window.solana.connect();
-  
-  // Оборачиваем Phantom Wallet в объект Anchor Wallet
-  // const wallet = new anchor.Wallet(window.solana);
-  
-  const walletAdapter = {
-    publicKey: new anchor.web3.PublicKey(window.solana.publicKey.toString()),
-    signTransaction: async (tx) => await window.solana.signTransaction(tx),
-    signAllTransactions: async (txs) => await window.solana.signAllTransactions(txs),
-    // Если требуется, можно добавить заглушку для signMessage:
-    signMessage: async (message) => {
-      if (window.solana.signMessage) {
-        return await window.solana.signMessage(message);
-      }
-      throw new Error("Wallet does not support signMessage");
-    }
-  };
-
-  const [userAccount, userBump] = sol.PublicKey.findProgramAddressSync(
-    [Buffer.from("user", "utf8"), publicKey.toBytes()],
-    PROGRAM_ID
-  );
-  const rpcSol = new sol.Connection("https://greatest-dark-haze.solana-mainnet.quiknode.pro/59212e5be0a628ec9d05e336694332955ff08bff", "processed");
-  const [stateAccount, stateBump] = sol.PublicKey.findProgramAddressSync([Buffer.from("state", "utf8")], PROGRAM_ID);
-  const provider = new anchor.AnchorProvider(rpcSol, walletAdapter, {
-    preflightCommitment: "processed",
-  });
-  anchor.setProvider(provider);
-  const program = new anchor.Program(IDL, PROGRAM_ID, provider);
-  return { connection, program, PROGRAM_ID, userAccount, userBump, stateAccount, stateBump };
-}
+import getPhantomWalletProvider from "./getPhantomWalletProvider";
+import { getEnv } from "./env";
+import { sendInstructions } from "./sendInstructions";
 
 export const isNonceUsed = async (connection, publicKey, nonce) => {
   try {
@@ -68,29 +24,6 @@ export const isNonceUsed = async (connection, publicKey, nonce) => {
     console.log(e);
     return false;
   }
-}
-
-const sendInstructions = async (args) => {
-  const tx = new sol.Transaction();
-  args.instructions.map((t) => tx.add(t));
-  if (args.signers) tx.sign(...args.signers);
-  // return await sol.sendAndConfirmTransaction(args.connection, tx, [this.keyPair]);
-  const rpcSol = new sol.Connection("https://greatest-dark-haze.solana-mainnet.quiknode.pro/59212e5be0a628ec9d05e336694332955ff08bff", "processed");
-  
-  const provider = getProvider();
-  const wallet = await provider.connect();
-  tx.feePayer = wallet.publicKey;
-  
-  const { blockhash } = await connection.getLatestBlockhash();
-  tx.recentBlockhash = blockhash;
-
-  const signedTx = await provider.signTransaction(tx);
-  
-  const txid = await rpcSol.sendRawTransaction(signedTx.serialize());
-
-  // Ждём подтверждения транзакции (опционально можно указать уровень подтверждения)
-  return await rpcSol.confirmTransaction(txid, 'processed');
-
 }
 
 const getLastWithdrawNonce = async (connection, publicKey) => {
@@ -105,7 +38,7 @@ const getLastWithdrawNonce = async (connection, publicKey) => {
 }
 
 export const withdraw = async ({ /*nearConnection, accountId,*/ transfer , signature, nonce }) => {
-  const provider = getProvider();
+  const provider = getPhantomWalletProvider();
   const solana = await provider.connect();
   const publicKey = solana.publicKey;
 

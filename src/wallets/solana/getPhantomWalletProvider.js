@@ -1,4 +1,4 @@
-const getProvider = () => {
+const getPhantomWalletProvider = () => {
   if ('phantom' in window) {
     const anyWindow = window;
     const provider = anyWindow.phantom?.solana;
@@ -11,4 +11,4 @@ const getProvider = () => {
   window.open('https://phantom.app/', '_blank');
 };
 
-export default getProvider;
+export default getPhantomWalletProvider;
